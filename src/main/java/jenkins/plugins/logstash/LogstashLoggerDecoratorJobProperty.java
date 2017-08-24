@@ -1,0 +1,59 @@
+/*
+ * The MIT License
+ *
+ * Copyright 2017 GerritForge Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
+package jenkins.plugins.logstash;
+
+import hudson.model.Run;
+import org.jenkinsci.plugins.workflow.job.WorkflowJob;
+import org.jenkinsci.plugins.workflow.job.WorkflowRun;
+import org.jenkinsci.plugins.workflow.job.properties.LoggerDecorationJobProperty;
+import org.kohsuke.stapler.DataBoundConstructor;
+
+import java.io.OutputStream;
+
+/**
+ * Build wrapper that decorates the build's logger to insert a
+ * {@link LogstashNote} on each output line.
+ *
+ * @author K Jonathan Harker
+ */
+public class LogstashLoggerDecoratorJobProperty extends LoggerDecorationJobProperty {
+
+    /**
+     * Create a new {@link LogstashLoggerDecoratorJobProperty}.
+     */
+    @DataBoundConstructor
+    public LogstashLoggerDecoratorJobProperty() {
+    }
+
+    @Override
+    public OutputStream decorateLogger(WorkflowJob job, WorkflowRun build, OutputStream logger) {
+        LogstashWriter logstash = getLogStashWriter(build, logger);
+        return new LogstashOutputStream(logger, logstash);
+    }
+
+    LogstashWriter getLogStashWriter(Run<?, ?> build, OutputStream errorStream) {
+        return new LogstashWriter(build, errorStream, null);
+    }
+}
