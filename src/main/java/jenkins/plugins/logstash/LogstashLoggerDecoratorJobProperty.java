@@ -24,7 +24,11 @@
 
 package jenkins.plugins.logstash;
 
-import hudson.model.Run;
+import hudson.Extension;
+import hudson.model.*;
+import jenkins.branch.BranchPropertyDescriptor;
+import jenkins.branch.MultiBranchProjectDescriptor;
+import org.jenkinsci.Symbol;
 import org.jenkinsci.plugins.workflow.job.WorkflowJob;
 import org.jenkinsci.plugins.workflow.job.WorkflowRun;
 import org.jenkinsci.plugins.workflow.job.properties.LoggerDecorationJobProperty;
@@ -39,7 +43,6 @@ import java.io.OutputStream;
  * @author K Jonathan Harker
  */
 public class LogstashLoggerDecoratorJobProperty extends LoggerDecorationJobProperty {
-
     /**
      * Create a new {@link LogstashLoggerDecoratorJobProperty}.
      */
@@ -49,11 +52,20 @@ public class LogstashLoggerDecoratorJobProperty extends LoggerDecorationJobPrope
 
     @Override
     public OutputStream decorateLogger(WorkflowJob job, WorkflowRun build, OutputStream logger) {
-        LogstashWriter logstash = getLogStashWriter(build, logger);
+        LogstashWriter logstash = getLogStashWriter(job, build, logger);
         return new LogstashOutputStream(logger, logstash);
     }
 
-    LogstashWriter getLogStashWriter(Run<?, ?> build, OutputStream errorStream) {
-        return new LogstashWriter(build, errorStream, null);
+    LogstashWriter getLogStashWriter(Job<?,?> job, Run<?, ?> build, OutputStream errorStream) {
+        return new LogstashWriter(job, build, errorStream, null);
+    }
+
+    @Extension(ordinal = -100)
+    @Symbol("sendPipelineLogToLostash")
+    public static class DescriptorImpl extends JobPropertyDescriptor {
+        @Override
+        public String getDisplayName() {
+            return "Send console log to Logstash";
+        }
     }
 }
