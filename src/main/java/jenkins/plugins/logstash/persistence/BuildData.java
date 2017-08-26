@@ -32,19 +32,14 @@ import hudson.model.TaskListener;
 import hudson.model.Run;
 import hudson.model.Node;
 import hudson.model.Executor;
+import hudson.scm.ChangeLogSet;
+import hudson.scm.SCM;
 import hudson.tasks.test.AbstractTestResultAction;
 import hudson.tasks.test.TestResult;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -59,6 +54,8 @@ import org.apache.commons.lang.StringUtils;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import org.jenkinsci.plugins.workflow.job.WorkflowJob;
+import org.jenkinsci.plugins.workflow.job.WorkflowRun;
 
 /**
  * POJO for mapping build info to JSON.
@@ -70,6 +67,9 @@ public class BuildData {
   // ISO 8601 date format
   public transient static final DateFormat DATE_FORMATTER = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ");
   private final static Logger LOGGER = Logger.getLogger(MethodHandles.lookup().lookupClass().getCanonicalName());
+  private final List<ChangeLogSet<? extends ChangeLogSet.Entry>> changeSets;
+  private final Collection<? extends SCM> scms;
+
   public static class TestData {
     int totalCount, skipCount, failCount, passCount;
     List<FailedTest> failedTestsWithErrorDetail;
@@ -135,7 +135,10 @@ public class BuildData {
   protected Set<String> sensitiveBuildVariables;
   protected TestData testResults = null;
 
-  BuildData() {}
+  BuildData() {
+    changeSets = Collections.emptyList();
+    scms = Collections.emptyList();
+  }
 
   // Freestyle project build
   public BuildData(AbstractBuild<?, ?> build, Date currentTime) {
@@ -176,9 +179,39 @@ public class BuildData {
     for (String key : sensitiveBuildVariables) {
       buildVariables.remove(key);
     }
+
+    changeSets = build.getChangeSets();
+    scms = Collections.emptyList();
   }
 
   // Pipeline project build
+  public BuildData(WorkflowJob job, WorkflowRun build, Date currentTime, TaskListener listener) {
+    initData(build, currentTime);
+
+    Executor executor = build.getExecutor();
+    if (executor == null) {
+      buildHost = "master";
+    } else {
+      buildHost = StringUtils.isBlank(executor.getDisplayName()) ? "master" : executor.getDisplayName();
+    }
+
+    rootProjectName = projectName;
+    rootProjectDisplayName = displayName;
+    rootBuildNum = buildNum;
+
+    try {
+      // TODO: sensitive variables are not filtered, c.f. https://stackoverflow.com/questions/30916085
+      buildVariables = build.getEnvironment(listener);
+    } catch (IOException | InterruptedException e) {
+      LOGGER.log(WARNING,"Unable to get environment for " + build.getDisplayName(),e);
+      buildVariables = new HashMap<String, String>();
+    }
+
+    changeSets = build.getChangeSets();
+    scms = job.getSCMs();
+  }
+
+  // Fallback for any other build types
   public BuildData(Run<?, ?> build, Date currentTime, TaskListener listener) {
     initData(build, currentTime);
 
@@ -200,6 +233,9 @@ public class BuildData {
       LOGGER.log(WARNING,"Unable to get environment for " + build.getDisplayName(),e);
       buildVariables = new HashMap<String, String>();
     }
+
+    changeSets = Collections.emptyList();
+    scms = Collections.emptyList();
   }
 
   private void initData(Run<?, ?> build, Date currentTime) {
@@ -223,8 +259,14 @@ public class BuildData {
 
   @Override
   public String toString() {
-    Gson gson = new GsonBuilder().create();
+    Gson gson = getGsonBuilder().create();
     return gson.toJson(this);
+  }
+
+  private GsonBuilder getGsonBuilder() {
+    GsonBuilder gsonBuilder = new GsonBuilder();
+    gsonBuilder.registerTypeAdapter(SCM.class, new SCMGsonSerializer());
+    return gsonBuilder;
   }
 
   public JSONObject toJson() {

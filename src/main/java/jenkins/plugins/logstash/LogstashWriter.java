@@ -26,6 +26,7 @@ package jenkins.plugins.logstash;
 
 
 import hudson.model.AbstractBuild;
+import hudson.model.Job;
 import hudson.model.TaskListener;
 import hudson.model.Run;
 import jenkins.model.Jenkins;
@@ -35,6 +36,8 @@ import jenkins.plugins.logstash.persistence.LogstashIndexerDao;
 import net.sf.json.JSONObject;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
+import org.jenkinsci.plugins.workflow.job.WorkflowJob;
+import org.jenkinsci.plugins.workflow.job.WorkflowRun;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -55,15 +58,17 @@ public class LogstashWriter {
 
   final OutputStream errorStream;
   final Run<?, ?> build;
+  final Job<?, ?> job;
   final TaskListener listener;
   final BuildData buildData;
   final String jenkinsUrl;
   final LogstashIndexerDao dao;
   private boolean connectionBroken;
 
-  public LogstashWriter(Run<?, ?> run, OutputStream error, TaskListener listener) {
+  public LogstashWriter(Job<?,?> job, Run<?, ?> run, OutputStream error, TaskListener listener) {
     this.errorStream = error != null ? error : System.err;
     this.build = run;
+    this.job = job;
     this.listener = listener;
     this.dao = this.getDaoOrNull();
     if (this.dao == null) {
@@ -136,6 +141,8 @@ public class LogstashWriter {
   BuildData getBuildData() {
     if (build instanceof AbstractBuild) {
       return new BuildData((AbstractBuild) build, new Date());
+    } else if(build instanceof WorkflowRun) {
+      return new BuildData((WorkflowJob) job, (WorkflowRun) build, new Date(), listener);
     } else {
       return new BuildData(build, new Date(), listener);
     }
